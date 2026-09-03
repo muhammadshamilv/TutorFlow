@@ -1,53 +1,18 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, useRoutes } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { AuthProvider } from "@/context/AuthContext";
-import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
-import { LoginPage } from "@/pages/auth/LoginPage";
-import { ResetPasswordPage } from "@/pages/auth/ResetPasswordPage";
-import { StudentDetailPage } from "@/pages/tutor/StudentDetailPage";
-import { StudentDashboardPage } from "@/pages/student/StudentDashboardPage";
-import { TutorDashboardPage } from "@/pages/tutor/TutorDashboardPage";
-import { ProtectedRoute } from "@/routes/ProtectedRoute";
-import { RoleRedirect } from "@/routes/RoleRedirect";
+import { routes } from "@/routes/routes";
+
+function AppRoutes() {
+  return useRoutes(routes);
+}
 
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-
-          <Route path="/" element={<RoleRedirect />} />
-
-          <Route
-            path="/tutor"
-            element={
-              <ProtectedRoute allowedRole="tutor">
-                <TutorDashboardPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/tutor/students/:studentId"
-            element={
-              <ProtectedRoute allowedRole="tutor">
-                <StudentDetailPage />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/student"
-            element={
-              <ProtectedRoute allowedRole="student">
-                <StudentDashboardPage />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
+        <AppRoutes />
         <Toaster richColors position="top-right" />
       </AuthProvider>
     </BrowserRouter>

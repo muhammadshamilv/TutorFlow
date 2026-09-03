@@ -33,4 +33,5 @@ urlpatterns = [
     path("api/v1/health/", health_check, name="health-check"),
     path("api/v1/auth/", include("users.urls")),
     path("api/v1/students/", include("students.urls")),
+    path("api/v1/sessions/", include("sessions_app.urls")),
 ]

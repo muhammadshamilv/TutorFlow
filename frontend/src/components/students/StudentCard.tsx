@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { EditStudentDialog } from "@/components/students/EditStudentDialog";
 import { DeleteStudentDialog } from "@/components/students/DeleteStudentDialog";
 import { Badge } from "@/components/ui/badge";
+import { paths } from "@/routes/paths";
 import type { Student } from "@/api/students";
 
 interface StudentCardProps {
@@ -22,7 +23,7 @@ function initials(name: string) {
 export function StudentCard({ student, onChanged }: StudentCardProps) {
     return (
         <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 transition-shadow hover:shadow-sm">
-            <Link to={`/tutor/students/${student.id}`} className="flex items-center gap-3">
+            <Link to={paths.studentDetail(student.id)} className="flex items-center gap-3">
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
                     {initials(student.user.full_name)}
                 </div>
@@ -41,7 +42,7 @@ export function StudentCard({ student, onChanged }: StudentCardProps) {
                 <p className="line-clamp-2 text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">Weak areas: </span>
                     {student.weak_areas}
-                </p>
+                    </p>
             )}
 
             <div className="flex gap-2 pt-1">
