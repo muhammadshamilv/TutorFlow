@@ -5,6 +5,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ForgotPasswordPage } from "@/pages/auth/ForgotPasswordPage";
 import { LoginPage } from "@/pages/auth/LoginPage";
 import { ResetPasswordPage } from "@/pages/auth/ResetPasswordPage";
+import { StudentDetailPage } from "@/pages/tutor/StudentDetailPage";
 import { StudentDashboardPage } from "@/pages/student/StudentDashboardPage";
 import { TutorDashboardPage } from "@/pages/tutor/TutorDashboardPage";
 import { ProtectedRoute } from "@/routes/ProtectedRoute";
@@ -26,6 +27,14 @@ function App() {
             element={
               <ProtectedRoute allowedRole="tutor">
                 <TutorDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tutor/students/:studentId"
+            element={
+              <ProtectedRoute allowedRole="tutor">
+                <StudentDetailPage />
               </ProtectedRoute>
             }
           />
