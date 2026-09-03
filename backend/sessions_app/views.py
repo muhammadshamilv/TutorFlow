@@ -4,6 +4,9 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from ai_services.gemini_client import AIServiceError
+from ai_services.serializers import SessionPlanResponseSerializer, SessionReviewResponseSerializer
+from ai_services.services import generate_session_plan, generate_session_review
 from users.permissions import IsTutor
 
 from .models import Session, SessionStatus
@@ -26,9 +29,9 @@ class SessionViewSet(viewsets.ModelViewSet):
 
     State transitions are deliberately NOT done through PATCH on
     `status` directly — they're separate POST actions
-    (`start`, `complete`) so each transition can carry its own
-    validation and can never be combined with an unrelated field edit
-    in the same request. This is what makes "no skipping states"
+    (`start`, `complete`, `ai-review`) so each transition can carry its
+    own validation and can never be combined with an unrelated field
+    edit in the same request. This is what makes "no skipping states"
     provable: there is no code path that writes an arbitrary status
     value.
     """
@@ -91,8 +94,7 @@ class SessionViewSet(viewsets.ModelViewSet):
         status against ALLOWED_TRANSITIONS, and only then writes. The
         `select_for_update` plus re-check inside the transaction is
         what makes this safe against two rapid duplicate clicks/requests
-        racing each other (both would otherwise read 'scheduled' and
-        both try to move to 'in_progress').
+        racing each other.
         """
         with transaction.atomic():
             locked_session = Session.objects.select_for_update().get(pk=session.pk)
@@ -132,7 +134,70 @@ class SessionViewSet(viewsets.ModelViewSet):
             return error_response
         return Response(SessionSerializer(updated).data)
 
-    # Note: the transition to 'ai_reviewed' is intentionally NOT here.
-    # It is triggered from ai_services (Phase 7) after a successful AI
-    # call, so a session can never reach 'ai_reviewed' without an
-    # actual AI review having been generated and stored.
+    # -----------------------------------------------------------------
+    # AI features
+    # -----------------------------------------------------------------
+
+    @action(detail=True, methods=["post"], url_path="ai-plan")
+    def ai_plan(self, request, pk=None):
+        """
+        Generates (or regenerates) an AI session plan. Allowed only
+        while the session is still 'scheduled' — planning happens
+        before the session starts. Does not change session status.
+        """
+        session = self.get_object()
+        if session.status != SessionStatus.SCHEDULED:
+            return Response(
+                {
+                    "error": {
+                        "detail": "AI plans can only be generated for sessions that haven't started yet.",
+                        "fields": None,
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            updated = generate_session_plan(session)
+        except AIServiceError as exc:
+            return Response(
+                {"error": {"detail": str(exc), "fields": None}},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response(SessionPlanResponseSerializer(updated).data)
+
+    @action(detail=True, methods=["post"], url_path="ai-review")
+    def ai_review(self, request, pk=None):
+        """
+        Generates an AI review for a completed session and transitions
+        it to 'ai_reviewed'. This is the ONLY code path that can move a
+        session into 'ai_reviewed' — it happens as a direct consequence
+        of a successful AI call, never as a bare status write.
+        """
+        session = self.get_object()
+        if session.status != SessionStatus.COMPLETED:
+            return Response(
+                {
+                    "error": {
+                        "detail": "A session must be completed before it can be AI reviewed.",
+                        "fields": None,
+                    }
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            updated = generate_session_review(session)
+        except AIServiceError as exc:
+            return Response(
+                {"error": {"detail": str(exc), "fields": None}},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        except ValueError as exc:
+            return Response(
+                {"error": {"detail": str(exc), "fields": None}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(SessionReviewResponseSerializer(updated).data)

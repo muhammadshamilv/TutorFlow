@@ -20,10 +20,24 @@ class SessionSerializer(serializers.ModelSerializer):
             "scheduled_end",
             "status",
             "notes",
+            "ai_plan",
+            "ai_plan_generated_at",
+            "ai_review",
+            "ai_review_generated_at",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "tutor", "status", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "tutor",
+            "status",
+            "ai_plan",
+            "ai_plan_generated_at",
+            "ai_review",
+            "ai_review_generated_at",
+            "created_at",
+            "updated_at",
+        ]
 
 
 def _check_clash(tutor, student_field_start, student_field_end, exclude_id=None):

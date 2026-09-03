@@ -33,7 +33,7 @@ class Session(models.Model):
     Once status is 'completed' or 'ai_reviewed', `notes` becomes
     read-only at the model level (enforced in `save`) — the only
     allowed change after completion is the AI review transition itself,
-    which is handled by a separate service (Phase 7) that does not
+    which is handled by a separate service (ai_services) that does not
     touch `notes`.
     """
 
@@ -62,6 +62,17 @@ class Session(models.Model):
     )
 
     notes = models.TextField(blank=True)
+
+    # --- AI-generated content -------------------------------------------------
+    # Stored as structured JSON so the frontend can render it without
+    # re-parsing free text, and so a progress summary can later read
+    # every past review's fields directly instead of re-prompting the
+    # AI to re-derive them from raw notes.
+    ai_plan = models.JSONField(null=True, blank=True)
+    ai_plan_generated_at = models.DateTimeField(null=True, blank=True)
+
+    ai_review = models.JSONField(null=True, blank=True)
+    ai_review_generated_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

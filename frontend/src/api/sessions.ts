@@ -1,4 +1,5 @@
 import apiClient from "./client";
+import type { SessionPlan, SessionReview } from "./ai";
 
 export type SessionStatus = "scheduled" | "in_progress" | "completed" | "ai_reviewed";
 
@@ -12,6 +13,10 @@ export interface Session {
     scheduled_end: string;
     status: SessionStatus;
     notes: string;
+    ai_plan: SessionPlan | null;
+    ai_plan_generated_at: string | null;
+    ai_review: SessionReview | null;
+    ai_review_generated_at: string | null;
     created_at: string;
     updated_at: string;
 }

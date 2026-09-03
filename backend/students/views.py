@@ -1,6 +1,11 @@
-from rest_framework import viewsets
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
+from ai_services.gemini_client import AIServiceError
+from ai_services.serializers import ProgressSummaryResponseSerializer
+from ai_services.services import generate_progress_summary
 from users.permissions import IsTutor
 
 from .models import Student
@@ -18,6 +23,8 @@ class StudentViewSet(viewsets.ModelViewSet):
       object-level permission (so it can't be reached directly by ID
       either).
     - create builds the student's login account and profile together.
+    - progress-summary aggregates every past AI review for this
+      student into a single trend paragraph.
     """
 
     permission_classes = [IsAuthenticated, IsTutor, IsOwningTutor]
@@ -39,3 +46,17 @@ class StudentViewSet(viewsets.ModelViewSet):
         context = super().get_serializer_context()
         context["request"] = self.request
         return context
+
+    @action(detail=True, methods=["post"], url_path="progress-summary")
+    def progress_summary(self, request, pk=None):
+        student = self.get_object()
+
+        try:
+            result = generate_progress_summary(student)
+        except AIServiceError as exc:
+            return Response(
+                {"error": {"detail": str(exc), "fields": None}},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response(ProgressSummaryResponseSerializer(result).data)

@@ -128,6 +128,19 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = env("EMAIL_HOST_USER", default="noreply@tutorflow.local")
 
 
+# AI service (Gemini)
+GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
+# Configurable so a future model retirement (Google does this periodically)
+# only needs an env var change, not a code deploy.
+GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-3.6-flash")
+# Tried in order if the primary model is overloaded/unavailable.
+GEMINI_MODEL_FALLBACKS = env.list(
+    "GEMINI_MODEL_FALLBACKS",
+    default=["gemini-2.5-flash-lite", "gemini-2.5-flash"],
+)
+GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-flash-latest")
+
+
 # ---------------------------------------------------------------------------
 # REST Framework + JWT (cookie-based)
 # ---------------------------------------------------------------------------

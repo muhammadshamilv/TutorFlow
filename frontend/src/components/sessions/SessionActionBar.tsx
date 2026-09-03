@@ -1,4 +1,4 @@
-import { CheckCircle2, PlayCircle, Sparkles } from "lucide-react";
+import { CheckCircle2, PlayCircle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -60,10 +60,9 @@ export function SessionActionBar({ session, onChanged }: SessionActionBarProps) 
 
     if (session.status === "completed") {
         return (
-            <Button disabled title="AI review — available in Phase 8">
-                <Sparkles className="size-4" />
-                Run AI review
-            </Button>
+            <p className="text-sm text-muted-foreground">
+                Session completed. Run the AI review below to wrap it up.
+            </p>
         );
     }
 
