@@ -7,6 +7,22 @@ export interface ApiErrorShape {
     };
 }
 
+/**
+ * Shape returned by every paginated list endpoint (see
+ * config.pagination.StandardPagination on the backend). Generic over
+ * the item type so each API module can declare
+ * `PaginatedResponse<Student>`, `PaginatedResponse<Session>`, etc.
+ */
+export interface PaginatedResponse<T> {
+    count: number;
+    total_pages: number;
+    current_page: number;
+    page_size: number;
+    next: string | null;
+    previous: string | null;
+    results: T[];
+}
+
 const apiClient = axios.create({
     baseURL: import.meta.env.VITE_API_BASE_URL,
     headers: {
@@ -44,12 +60,12 @@ apiClient.interceptors.response.use(
         originalRequest?.url?.includes("/auth/refresh");
 
         if (
-        error.response?.status !== 401 ||
-        !originalRequest ||
-        originalRequest._retried ||
-        isAuthEndpoint
+            error.response?.status !== 401 ||
+            !originalRequest ||
+            originalRequest._retried ||
+            isAuthEndpoint
         ) {
-        return Promise.reject(error);
+            return Promise.reject(error);
         }
 
         originalRequest._retried = true;
@@ -57,7 +73,7 @@ apiClient.interceptors.response.use(
         if (isRefreshing) {
             // Wait for the in-flight refresh to finish, then retry.
             await new Promise<void>((resolve) => pendingQueue.push(resolve));
-        return apiClient(originalRequest);
+            return apiClient(originalRequest);
         }
 
         isRefreshing = true;

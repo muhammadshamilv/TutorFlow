@@ -40,10 +40,14 @@ class SessionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsTutor, IsOwningTutorOfSession]
 
     def get_queryset(self):
-        return (
+        queryset = (
             Session.objects.select_related("student__user", "tutor")
             .filter(tutor=self.request.user)
         )
+        student_id = self.request.query_params.get("student")
+        if student_id:
+            queryset = queryset.filter(student_id=student_id)
+        return queryset
 
     def get_serializer_class(self):
         if self.action == "create":

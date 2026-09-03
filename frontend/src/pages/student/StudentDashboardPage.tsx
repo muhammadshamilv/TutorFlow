@@ -7,14 +7,11 @@ import { HomeworkList } from "@/components/student-view/HomeworkList";
 import { PastSessionCard } from "@/components/student-view/PastSessionCard";
 import { StudentDashboardSkeleton } from "@/components/student-view/StudentDashboardSkeleton";
 import { UpcomingSessionCard } from "@/components/student-view/UpcomingSessionCard";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from "@/context/AuthContext";
 import { currentUserAtom } from "@/store/auth";
 
 export function StudentDashboardPage() {
   const currentUser = useAtomValue(currentUserAtom);
-  const { logout } = useAuth();
 
   const [sessions, setSessions] = useState<StudentSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,15 +54,12 @@ export function StudentDashboardPage() {
   if (isLoading) return <StudentDashboardSkeleton />;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <header className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Welcome, {currentUser?.first_name}</h1>
-          <p className="text-sm text-muted-foreground">{currentUser?.email}</p>
-        </div>
-        <Button variant="outline" onClick={() => logout()}>
-          Log out
-        </Button>
+    <div className="mx-auto max-w-3xl">
+      <header className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Welcome, {currentUser?.first_name}
+        </h1>
+        <p className="text-sm text-muted-foreground">{currentUser?.email}</p>
       </header>
 
       {error && (
@@ -109,6 +103,6 @@ export function StudentDashboardPage() {
           </TabsContent>
         </Tabs>
       )}
-    </main>
+    </div>
   );
 }

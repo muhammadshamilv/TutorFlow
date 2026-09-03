@@ -130,6 +130,11 @@ DEFAULT_FROM_EMAIL = env("EMAIL_HOST_USER", default="noreply@tutorflow.local")
 
 # AI service (Gemini)
 GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
+GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-3.6-flash")
+GEMINI_MODEL_FALLBACKS = env.list(
+    "GEMINI_MODEL_FALLBACKS",
+    default=["gemini-3.5-flash", "gemini-3.1-flash-lite"],
+)
 # Configurable so a future model retirement (Google does this periodically)
 # only needs an env var change, not a code deploy.
 GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-3.6-flash")
@@ -153,6 +158,8 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
     "EXCEPTION_HANDLER": "users.exceptions.custom_exception_handler",
+    "DEFAULT_PAGINATION_CLASS": "config.pagination.StandardPagination",
+    "PAGE_SIZE": 12,
 }
 
 SIMPLE_JWT = {

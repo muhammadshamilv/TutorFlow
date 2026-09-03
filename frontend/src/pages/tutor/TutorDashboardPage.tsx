@@ -3,27 +3,30 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getApiErrorMessage } from "@/api/client";
 import { listStudents, type Student } from "@/api/students";
+import { Pagination } from "@/components/shared/Pagination";
 import { AddStudentDialog } from "@/components/students/AddStudentDialog";
 import { StudentCard } from "@/components/students/StudentCard";
 import { StudentListSkeleton } from "@/components/students/StudentListSkeleton";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/context/AuthContext";
 import { currentUserAtom } from "@/store/auth";
 
 export function TutorDashboardPage() {
   const currentUser = useAtomValue(currentUserAtom);
-  const { logout } = useAuth();
 
   const [students, setStudents] = useState<Student[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadStudents = useCallback(async () => {
+  const loadStudents = useCallback(async (targetPage: number) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await listStudents();
-      setStudents(data);
+      const data = await listStudents(targetPage);
+      setStudents(data.results);
+      setTotalPages(data.total_pages);
+      setTotalCount(data.count);
     } catch (err) {
       setError(getApiErrorMessage(err));
     } finally {
@@ -32,24 +35,27 @@ export function TutorDashboardPage() {
   }, []);
 
   useEffect(() => {
-    loadStudents();
-  }, [loadStudents]);
+    loadStudents(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  const handleStudentListChanged = () => loadStudents(page);
+  const handleStudentCreated = () => {
+    setPage(1);
+    loadStudents(1);
+  };
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
-      <header className="mb-8 flex items-start justify-between gap-4">
+    <div>
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b pb-6">
         <div>
-          <h1 className="text-2xl font-semibold">Your students</h1>
-          <p className="text-sm text-muted-foreground">
-            Signed in as {currentUser?.full_name} ({currentUser?.email})
+          <h1 className="text-2xl font-semibold tracking-tight">Your students</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Welcome back, {currentUser?.first_name}
+            {totalCount > 0 && ` · ${totalCount} student${totalCount === 1 ? "" : "s"}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <AddStudentDialog onCreated={loadStudents} />
-          <Button variant="outline" onClick={() => logout()}>
-            Log out
-          </Button>
-        </div>
+        <AddStudentDialog onCreated={handleStudentCreated} />
       </header>
 
       {isLoading && <StudentListSkeleton />}
@@ -70,12 +76,25 @@ export function TutorDashboardPage() {
       )}
 
       {!isLoading && !error && students.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {students.map((student) => (
-            <StudentCard key={student.id} student={student} onChanged={loadStudents} />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {students.map((student) => (
+              <StudentCard
+                key={student.id}
+                student={student}
+                onChanged={handleStudentListChanged}
+              />
+            ))}
+          </div>
+
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            className="mt-8"
+          />
+        </>
       )}
-    </main>
+    </div>
   );
 }
