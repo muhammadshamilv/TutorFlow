@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from ai_services.gemini_client import AIServiceError
 from ai_services.serializers import SessionPlanResponseSerializer, SessionReviewResponseSerializer
 from ai_services.services import generate_session_plan, generate_session_review
-from users.permissions import IsTutor
+from users.permissions import IsStudent, IsTutor
 
 from .models import Session, SessionStatus
 from .permissions import IsOwningTutorOfSession
@@ -16,6 +16,7 @@ from .serializers import (
     SessionNotesSerializer,
     SessionRescheduleSerializer,
     SessionSerializer,
+    StudentSessionSerializer,
 )
 
 
@@ -201,3 +202,24 @@ class SessionViewSet(viewsets.ModelViewSet):
             )
 
         return Response(SessionReviewResponseSerializer(updated).data)
+
+
+class MySessionsViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Student-only, read-only access to the logged-in student's own
+    sessions. Deliberately a separate viewset from SessionViewSet
+    (rather than branching by role inside one class) so a student can
+    never accidentally reach a tutor write action — there simply are
+    no write methods on ReadOnlyModelViewSet, and the queryset is
+    scoped to `student__user=request.user`, so one student can never
+    see another student's sessions even by guessing an ID.
+    """
+
+    permission_classes = [IsAuthenticated, IsStudent]
+    serializer_class = StudentSessionSerializer
+
+    def get_queryset(self):
+        return (
+            Session.objects.select_related("student__user", "tutor")
+            .filter(student__user=self.request.user)
+        )

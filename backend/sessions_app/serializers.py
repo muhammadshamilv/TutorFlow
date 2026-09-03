@@ -40,6 +40,33 @@ class SessionSerializer(serializers.ModelSerializer):
         ]
 
 
+class StudentSessionSerializer(serializers.ModelSerializer):
+    """
+    Read-only view of a session for the student it belongs to. Exposes
+    notes and the AI review/homework, but never exposes tutor-only
+    controls (there simply are no writable fields here — this
+    serializer has no create/update methods and is only ever used with
+    a ModelViewSet restricted to list/retrieve).
+    """
+
+    tutor_name = serializers.CharField(source="tutor.full_name", read_only=True)
+
+    class Meta:
+        model = Session
+        fields = [
+            "id",
+            "tutor_name",
+            "topic",
+            "scheduled_start",
+            "scheduled_end",
+            "status",
+            "notes",
+            "ai_review",
+            "ai_review_generated_at",
+        ]
+        read_only_fields = fields
+
+
 def _check_clash(tutor, student_field_start, student_field_end, exclude_id=None):
     """
     Shared clash check: this tutor cannot have two sessions whose time

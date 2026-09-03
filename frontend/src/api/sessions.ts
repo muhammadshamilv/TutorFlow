@@ -34,8 +34,25 @@ export interface RescheduleSessionPayload {
     scheduled_end?: string;
 }
 
+export interface StudentSession {
+    id: string;
+    tutor_name: string;
+    topic: string;
+    scheduled_start: string;
+    scheduled_end: string;
+    status: SessionStatus;
+    notes: string;
+    ai_review: SessionReview | null;
+    ai_review_generated_at: string | null;
+}
+
 export async function listSessions(): Promise<Session[]> {
     const response = await apiClient.get<Session[]>("/sessions/");
+    return response.data;
+}
+
+export async function listMySessions(): Promise<StudentSession[]> {
+    const response = await apiClient.get<StudentSession[]>("/sessions/my-sessions/");
     return response.data;
 }
 
