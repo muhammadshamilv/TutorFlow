@@ -1,140 +1,122 @@
 # TutorFlow
 
-A session management platform for online tutors who teach students one-to-one. Tutors add students, schedule sessions, take notes during a session, and use AI to plan sessions before they start and review them afterward. Students log in to see their own upcoming sessions, past notes, and homework.
-
-Built as a 7-day internship task. This README documents what was built, how the database is structured, the exact AI prompts used and why, what does not work yet, and what would come next.
+A session platform for online tutors who teach students one to one. A tutor can add students, schedule sessions, take notes during a session, and use AI to plan the session before it starts and summarise it afterwards. A student can log in and see their upcoming sessions, their past session notes, and the homework the AI generated for them.
 
 ---
 
-## What Works
+## Live URL
 
-- **Two-role authentication** — tutor and student accounts on a single `User` model, JWT stored in httpOnly cookies, roles enforced on every request server-side (not just hidden in the UI)
-- **Tutor creates students** — one action creates both the student's login account and their profile (subject, level, goals, weak areas) together
-- **Full student CRUD** — scoped so a tutor only ever sees their own students, enforced by both queryset filtering and an object-level permission check
-- **Strict 4-state session lifecycle** — `Scheduled → In progress → Completed → AI reviewed`, enforced so no state can be skipped and nothing after `Completed` can be edited except triggering the AI review
-- **Double-booking prevention** — a tutor cannot have two overlapping sessions; checked with a race-safe interval-overlap query
-- **Notes autosave** — debounced (1 second after the last keystroke), persists across page reloads, locked once a session is completed
-- **Three AI features (Gemini)** — session plan (pre-session), session review (post-session, triggers the state transition), and a cross-session progress summary — all grounded in the student's actual profile and history, not generic prompts
-- **Student dashboard** — upcoming sessions, past sessions with read-only notes, and an aggregated homework list, all scoped so a student can never see another student's data
-- **Forgot / reset password** — console-email flow (no real mail service required for this submission)
-- **Password show/hide toggle** on every password field
-- **Server-side pagination** on students and sessions lists, so the UI stays fast regardless of how many records exist
-- **Professional shell** — top navbar with a user menu, skeleton loading on every list/detail view, consistent empty and error states, graceful handling when the AI call fails (the app never crashes or corrupts session state on an AI outage)
+_add your deployed URL here_
 
-## What Does Not Work / Was Not Built
+## GitHub Repository
 
-- **Email delivery** — password reset links print to the backend console instead of sending a real email (the brief allows this; SMTP was not wired up in the time available)
-- **No session rescheduling UI** — the backend supports editing a still-`Scheduled` session's time/topic, but no frontend dialog was built for it; a tutor must currently cancel and re-schedule instead
-- **No automated test suite** — the app was verified manually via Postman (backend) and manual QA (frontend) at the end of every phase, but no `pytest`/`vitest` suite exists yet
-- **Bonus email-on-schedule feature** — not built (explicitly marked bonus, not required, in the brief)
-- **No timezone selector** — all times are handled in the browser's local timezone via `datetime-local` inputs and converted to UTC for storage; there's no explicit timezone picker if a tutor and student are in different zones
+_add your repository link here_
+
+## Test Logins
+
+| Role | Email | Password |
+|---|---|---|
+| Tutor | `tutor@tutorflow.com.com` | `Tutor@123` |
+| Student | `student@tutorflow.com` | `Student@123` |
 
 ---
 
 ## Tech Stack
 
-**Frontend:** React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Zod, React Hook Form, Jotai (global state) + Context API (auth actions), React Router, Axios, Sonner (toasts)
+**Frontend:** React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Zod, React Hook Form, Jotai, Context API, React Router, Axios
 
-**Backend:** Python, Django, Django REST Framework, `djangorestframework-simplejwt` (adapted for httpOnly cookies), PostgreSQL (hosted on Supabase), `google-genai` (Gemini)
-
-**Infrastructure:** Git/GitHub, deployed with environment variables set on the hosting platform (no local setup required to review)
+**Backend:** Python, Django, Django REST Framework, PostgreSQL (Supabase), Gemini (`google-genai`)
 
 ---
 
 ## Database Structure
 
-Four tables, all in PostgreSQL. All primary keys are UUIDs.
+Four tables in PostgreSQL.
 
 ### `users`
-The single table for both tutors and students — a `role` field distinguishes them, checked on every request server-side.
+Tutor accounts and student accounts share one table. A `role` field (`tutor` or `student`) is checked on every request on the server, not just in the interface.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID (PK) | |
-| `email` | varchar, unique | login identifier |
-| `password` | varchar | Django's hashed password |
+| `email` | varchar, unique | login |
+| `password` | varchar | hashed |
 | `first_name` / `last_name` | varchar | |
-| `role` | varchar(10) | `tutor` or `student` |
-| `is_active` / `is_staff` | bool | |
+| `role` | varchar | `tutor` or `student` |
 | `created_at` / `updated_at` | timestamp | |
 
 ### `students`
-A student's profile, owned by exactly one tutor and linked to exactly one login account.
+The student profile — name, subject, current level, learning goals, and weak areas, as required. Weak areas is free text and is what the AI reads.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID (PK) | |
-| `tutor_id` | UUID → `users.id` | the owning tutor |
-| `user_id` | UUID → `users.id`, unique | this student's own login |
-| `subject` | varchar(150) | |
-| `current_level` | varchar(50) | e.g. "Grade 10", "IELTS Band 5" |
-| `learning_goals` | text | free text |
-| `weak_areas` | text | free text — **read directly by every AI prompt** |
-| `created_at` / `updated_at` | timestamp | |
+| `tutor_id` | UUID → `users.id` | which tutor owns this student |
+| `user_id` | UUID → `users.id` | the student's own login account |
+| `subject` | varchar | |
+| `current_level` | varchar | |
+| `learning_goals` | text | |
+| `weak_areas` | text | free text, read directly by the AI |
 
 ### `sessions`
-The core entity — one row per tutoring session, carrying the lifecycle state and both AI outputs.
+One row per session, carrying the lifecycle state.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | UUID (PK) | |
 | `tutor_id` | UUID → `users.id` | |
 | `student_id` | UUID → `students.id` | |
-| `topic` | varchar(255) | |
-| `scheduled_start` / `scheduled_end` | timestamp | used for clash detection |
-| `status` | varchar(20) | `scheduled` / `in_progress` / `completed` / `ai_reviewed` |
-| `notes` | text | tutor's live notes, locked after `completed` |
-| `ai_plan` | jsonb, nullable | structured plan output |
-| `ai_plan_generated_at` | timestamp, nullable | |
-| `ai_review` | jsonb, nullable | structured review output |
-| `ai_review_generated_at` | timestamp, nullable | |
-| `created_at` / `updated_at` | timestamp | |
+| `topic` | varchar | |
+| `scheduled_start` / `scheduled_end` | timestamp | used to check for clashes |
+| `status` | varchar | `scheduled` / `in_progress` / `completed` / `ai_reviewed` |
+| `notes` | text | locked once the session is completed |
+| `ai_plan` | jsonb | the generated session plan |
+| `ai_review` | jsonb | the generated session review |
 
-Indexed on `(tutor, scheduled_start)` and `(student, scheduled_start)` to keep clash checks and per-student session lists fast without full table scans.
+### `password_reset_otps`
+Stores the 6-digit code used for the forgot-password flow.
 
-### Relationships
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID (PK) | |
+| `user_id` | UUID → `users.id` | |
+| `code_hash` | varchar | code is hashed, not stored in plain text |
+| `attempts` | smallint | |
+| `is_used` | bool | |
+| `expires_at` | timestamp | |
 
-```
-users (role=tutor) ─┬──< students >──┬─ users (role=student)
-                     │                │
-                     └──< sessions >──┘
-```
+### How the tables relate
 
 - One tutor → many students (`students.tutor_id`)
-- One student profile → exactly one login account (`students.user_id`, one-to-one)
+- One student profile → one login account (`students.user_id`)
 - One tutor → many sessions (`sessions.tutor_id`)
 - One student → many sessions (`sessions.student_id`)
 
-There is deliberately no separate "AI outputs" table — a plan and a review belong to exactly one session each, so they live directly on the `Session` row rather than introducing an unnecessary join.
-
-### Why this shape
-
-A single `users` table with a `role` field (rather than separate `Tutor`/`Student` models) was chosen because tutors and students share identical authentication needs — login, password reset, JWT — and only differ in what they're allowed to *do*, which is an access-control concern, not a data-modelling one. Keeping `ai_plan`/`ai_review` as JSON columns on `Session` (rather than free text) means the frontend never has to parse markdown or guess field names, and a "progress summary" can cheaply read every past review's `summary` field directly.
+A single `users` table with a `role` field was used instead of separate tutor and student tables, since both need the same login system and only differ in what they are allowed to do, which is an access rule rather than a difference in data.
 
 ---
 
-## The Session State Machine
+## The Session Lifecycle
 
 ```
-Scheduled ──start──> In progress ──complete──> Completed ──ai-review──> AI reviewed
+Scheduled → In progress → Completed → AI reviewed
 ```
 
-Enforced with a single allow-list of transitions (`sessions_app/models.py`), checked identically everywhere the state changes:
+Every session moves through these states in order and cannot skip one — for example it cannot go from Scheduled straight to AI reviewed. This is enforced on the server: each move (start, complete) is its own action, and the AI review action is the only thing that can move a session into the final state, so it can never reach "AI reviewed" without an actual review being generated. Once a session is Completed, its notes cannot be edited — only the AI review can be triggered.
 
-- Each transition is its **own API action** (`POST /sessions/{id}/start/`, `/complete/`), not a generic "update status" endpoint — there is no code path that can write an arbitrary status value or skip a step
-- Every transition re-reads and locks the row (`SELECT ... FOR UPDATE`) inside a database transaction before checking whether the move is legal, so two rapid duplicate clicks can't both succeed
-- The move to `ai_reviewed` only happens as a side effect of a **successful** AI review call — never as a bare status flip — so a session can never end up "AI reviewed" without an actual review existing
-- Once `Completed`, the notes field is rejected server-side on any edit attempt, regardless of what the frontend sends
+A tutor also cannot have two sessions scheduled at the same time; this is checked before saving.
 
 ---
 
-## AI Integration — Prompts and Rationale
+## AI Prompts
 
-**Model:** Gemini (`gemini-2.0-flash`), called via `google-genai`, with `response_schema` forcing structured JSON output rather than free text — every response is parsed directly into typed fields, never scraped from markdown.
+Two external services are used: **Gemini** for AI and **PostgreSQL (Supabase)** for the database.
 
-The one rule followed throughout: **never send a bare instruction.** Every prompt is assembled from the actual student profile and actual session history, because that's what the brief specifically flags as separating a good prompt from a generic one.
+Each prompt below sends the student's profile and session history to the AI, rather than a bare instruction, so the output is specific to that student instead of generic.
 
-### 1. Session Plan (before a session starts)
+### 1. AI Session Plan
+
+Sent before a session starts. Includes the student's subject, level, goals, and weak areas, plus their recent past sessions and notes.
 
 ```
 You are an experienced, encouraging private tutor preparing for an upcoming one-to-one session.
@@ -149,7 +131,7 @@ UPCOMING SESSION TOPIC
 {session topic}
 
 RECENT SESSION HISTORY (most recent first)
-{up to 5 past sessions: topic, status, and the tutor's actual notes}
+{up to 5 past sessions: topic, status, and the tutor's notes}
 
 TASK
 Create a session plan for the upcoming session on "{topic}" that is specifically
@@ -164,9 +146,11 @@ Return:
 3. practice_questions — exactly three questions targeting this student's weak areas.
 ```
 
-**Why written this way:** the brief explicitly warns that "generate a lesson plan" scores low because it ignores everything known about the student. This prompt makes the weak areas and goals unavoidable — the instruction directly says not to produce anything generic — and includes real session history so a second session builds on the first instead of starting cold every time. History is capped at 5 sessions to keep the prompt focused and the token cost bounded for students with a long history.
+**Why written this way:** a prompt that only says "generate a lesson plan" ignores everything known about the student, which is exactly what this task warns scores low. This prompt makes the weak areas and goals unavoidable by putting them directly in the instructions, and includes past session notes so the plan builds on what already happened instead of starting from nothing each time.
 
-### 2. Session Review (after a session is completed)
+### 2. AI Session Review
+
+Sent after a session is marked Completed. Includes the student's profile and the tutor's actual notes from that session.
 
 ```
 You are an experienced, encouraging private tutor writing up a session summary
@@ -179,7 +163,7 @@ SESSION TOPIC
 {topic}
 
 TUTOR'S RAW NOTES FROM THIS SESSION
-{the tutor's actual notes, verbatim}
+{the tutor's actual notes}
 
 TASK
 Based on the tutor's raw notes above and the student's known profile, write a
@@ -193,9 +177,11 @@ Return:
 3. next_session_suggestion — one concrete suggestion based on what this session revealed.
 ```
 
-**Why written this way:** this is the prompt most at risk of producing generic filler, since "summarise the session" alone gives the model nothing concrete to react to. Injecting the tutor's raw notes verbatim, and explicitly instructing the model to reference specific details from them, is what makes the homework and summary actually about what happened rather than a templated recap.
+**Why written this way:** the notes are the only record of what actually happened in the session, so they are sent to the AI word for word, and the instructions explicitly ask for specific details from them. Without this, the review would just be a generic restatement of the topic name.
 
-### 3. Progress Summary (aggregate, across all reviewed sessions)
+### 3. AI Progress Summary
+
+Sent when the tutor opens a student and asks for a progress summary. Sends every past AI review for that student, not just the latest one.
 
 ```
 You are an experienced private tutor writing a progress overview for a student
@@ -205,7 +191,7 @@ STUDENT PROFILE
 {profile block}
 
 HISTORY OF PAST SESSION REVIEWS (chronological)
-{every ai_reviewed session's topic + stored review summary}
+{every past AI-reviewed session's topic and summary}
 
 TASK
 Looking across ALL of the session reviews above as a trend (not just the most
@@ -217,65 +203,20 @@ Return:
 1. summary — a 4-6 sentence paragraph referencing recurring themes.
 ```
 
-**Why written this way:** a naive version of this feature would just re-summarise the latest session. The prompt explicitly forbids that ("not just the most recent one," "not a restatement of the last session alone") and feeds in the full chronological review history so the model has to find an actual trend rather than paraphrasing one data point.
+**Why written this way:** this feature is meant to show a trend over time, so the prompt sends the full review history and explicitly tells the AI not to just repeat the most recent session, which is the mistake a simpler prompt would make.
 
-### Failure handling
+### Handling AI Failures
 
-All three AI calls are wrapped so a Gemini outage never corrupts state: the network call happens **before** any database transaction opens, so a slow or failed request never holds a row lock; if it fails, the endpoint returns `502` with a clear message and the session/student data is left exactly as it was, retryable at any time. The frontend surfaces this as a dismissible error card with a "Try again" button rather than a crash.
-
----
-
-## API Overview
-
-All endpoints under `/api/v1/`. Auth via httpOnly cookies (`tf_access`, `tf_refresh`), set automatically on login.
-
-| Area | Endpoint | Notes |
-|---|---|---|
-| Auth | `POST /auth/login/`, `/refresh/`, `/logout/`, `GET /auth/me/` | |
-| Auth | `POST /auth/password-reset/`, `/password-reset/confirm/` | console-email based |
-| Students (tutor) | `GET/POST /students/`, `GET/PATCH/DELETE /students/{id}/` | paginated list |
-| Students (tutor) | `POST /students/{id}/progress-summary/` | AI, aggregate |
-| Sessions (tutor) | `GET/POST /sessions/`, `GET/PATCH/DELETE /sessions/{id}/` | paginated, `?student=` filter |
-| Sessions (tutor) | `PATCH /sessions/{id}/notes/` | autosave |
-| Sessions (tutor) | `POST /sessions/{id}/start/`, `/complete/` | state transitions |
-| Sessions (tutor) | `POST /sessions/{id}/ai-plan/`, `/ai-review/` | AI |
-| Sessions (student) | `GET /sessions/my-sessions/`, `/my-sessions/{id}/` | read-only, self-scoped |
+If the AI call fails, the app does not break. The request to the AI happens before anything is saved, so a failed call leaves the session or student exactly as it was, and the tutor sees a clear error message with the option to try again.
 
 ---
 
-## Test Logins
+## Bonus: Email on Scheduling
 
-> Replace with your actual deployed test accounts before submitting.
-
-| Role | Email | Password |
-|---|---|---|
-| Tutor | `tutor@example.com` | `TutorPass123` |
-| Student | `student@example.com` | `StudentPass123` |
-
----
-
-## Running Locally
-
-**Backend**
-```bash
-cd backend
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt --break-system-packages
-python manage.py migrate
-python manage.py runserver
-```
-
-**Frontend**
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Environment variables required (see `.env.example` in each folder): `DATABASE_URL`, `SECRET_KEY`, `GEMINI_API_KEY`, `ALLOWED_HOSTS`, `FRONTEND_URL` (backend); `VITE_API_BASE_URL` (frontend).
+When a tutor schedules a session, the student is emailed a notification via real Gmail SMTP. The test student account does not use a real inbox, so this cannot be seen directly — to check it, add a new student using your own email address, then schedule a session for them. If sending fails for any reason, scheduling still succeeds; the failure is only logged.
 
 ---
 
 ## What I'd Build Next
 
-With another day, session rescheduling would be the first addition, since the backend already supports it but the frontend dialog was never built. Real email delivery (Resend or SendGrid) would replace the console-based password reset and would also unlock the bonus feature of notifying a student when a session is scheduled. I'd add an automated test suite covering the state machine transitions and the ownership-isolation checks specifically, since those are the two areas where a silent regression would be most damaging. A calendar view of a tutor's week would make scheduling clashes visible before they happen rather than only being caught on save. Finally, I'd add a lightweight retry-with-backoff around the Gemini calls, since right now a failed AI call requires the tutor to manually click "try again" rather than the app quietly retrying once on their behalf.
+With another day, I would add a way to reschedule a session that is still in the Scheduled state, since right now a tutor would need to cancel and create a new one. I would write automated tests for the session state transitions and for the rule that one tutor cannot see another tutor's data, since those are the two things most likely to break silently later. I would add a calendar view so a tutor can see clashes visually instead of only being told about them when saving. I would make a failed AI call retry once automatically before showing an error, so a brief network issue does not require the tutor to click again themselves. Finally, I would add a way for a tutor to update a student's email if they made a typo when creating the account, since there is currently no way to correct it afterward.

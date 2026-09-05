@@ -1,20 +1,20 @@
 from django.conf import settings
-from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
-from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import User
+from .models import PasswordResetOTP, User
+from .otp_utils import create_otp_for_user, verify_otp_code
 from .serializers import (
     ChangePasswordSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
+    PasswordResetVerifySerializer,
     UserSerializer,
 )
 
@@ -160,13 +160,13 @@ class ChangePasswordView(APIView):
 
 class PasswordResetRequestView(APIView):
     """
-    POST /api/v1/auth/password-reset/
+    POST /api/v1/auth/password-reset/request/
     Body: { "email": str }
 
     Always returns 200 regardless of whether the email exists, to avoid
-    leaking which emails are registered. In this phase there is no real
-    mail service, so Django's console email backend prints the reset
-    link to the backend server log — the reviewer can find it there.
+    leaking which emails are registered. If the account exists, a fresh
+    6-digit OTP is generated (invalidating any previous unused code for
+    that user) and emailed via real SMTP.
     """
 
     permission_classes = [AllowAny]
@@ -182,31 +182,98 @@ class PasswordResetRequestView(APIView):
             user = None
 
         if user is not None:
-            uid = urlsafe_base64_encode(force_bytes(user.pk))
-            token = default_token_generator.make_token(user)
-            reset_link = f"{settings.FRONTEND_URL}/reset-password?uid={uid}&token={token}"
+            _, raw_code = create_otp_for_user(user)
 
             send_mail(
-                subject="Reset your TutorFlow password",
+                subject="Your TutorFlow password reset code",
                 message=(
                     f"Hi {user.first_name},\n\n"
-                    f"Click the link below to reset your TutorFlow password:\n"
-                    f"{reset_link}\n\n"
-                    f"If you did not request this, you can ignore this email."
+                    f"Your TutorFlow password reset code is: {raw_code}\n\n"
+                    f"This code expires in {PasswordResetOTP.OTP_VALID_MINUTES} minutes "
+                    f"and can only be used once.\n\n"
+                    f"If you did not request this, you can safely ignore this email."
                 ),
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[user.email],
             )
 
         return Response(
-            {"detail": "If that email exists, a reset link has been sent."}
+            {"detail": "If that email exists, a verification code has been sent."}
+        )
+
+
+class PasswordResetVerifyView(APIView):
+    """
+    POST /api/v1/auth/password-reset/verify/
+    Body: { "email": str, "code": str }
+
+    Checks the code without changing the password yet. On success,
+    marks the OTP as verified so the confirm step can proceed — this
+    step existing separately (rather than combining verify+confirm
+    into one call) is what lets the frontend show "code correct, now
+    set your new password" as its own screen.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"].strip().lower()
+        code = serializer.validated_data["code"]
+
+        otp = self._get_active_otp(email)
+        if otp is None:
+            return Response(
+                {"error": {"detail": "Invalid or expired code. Please request a new one.", "fields": None}},
+                status=400,
+            )
+
+        if not otp.is_valid():
+            return Response(
+                {"error": {"detail": "This code has expired or has too many failed attempts. Please request a new one.", "fields": None}},
+                status=400,
+            )
+
+        if not verify_otp_code(otp, code):
+            remaining = max(PasswordResetOTP.MAX_ATTEMPTS - otp.attempts, 0)
+            return Response(
+                {
+                    "error": {
+                        "detail": f"Incorrect code. {remaining} attempt(s) remaining.",
+                        "fields": None,
+                    }
+                },
+                status=400,
+            )
+
+        otp.verified_at = timezone.now()
+        otp.save(update_fields=["verified_at"])
+        return Response({"detail": "Code verified. You can now set a new password."})
+
+    @staticmethod
+    def _get_active_otp(email):
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return None
+        return (
+            PasswordResetOTP.objects.filter(user=user, is_used=False)
+            .order_by("-created_at")
+            .first()
         )
 
 
 class PasswordResetConfirmView(APIView):
     """
     POST /api/v1/auth/password-reset/confirm/
-    Body: { "uid": str, "token": str, "new_password": str }
+    Body: { "email": str, "code": str, "new_password": str }
+
+    Requires the OTP to have already been verified (verified_at set)
+    by PasswordResetVerifyView — this prevents skipping straight to
+    this endpoint with a guessed code in one shot, since a code that
+    was never separately verified can never reach here successfully
+    even if the digits happen to be correct.
     """
 
     permission_classes = [AllowAny]
@@ -215,22 +282,38 @@ class PasswordResetConfirmView(APIView):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        email = data["email"].strip().lower()
 
         try:
-            user_id = force_str(urlsafe_base64_decode(data["uid"]))
-            user = User.objects.get(pk=user_id)
-        except (User.DoesNotExist, ValueError, TypeError, OverflowError):
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
             return Response(
-                {"error": {"detail": "Invalid or expired reset link.", "fields": None}},
+                {"error": {"detail": "Invalid or expired code. Please request a new one.", "fields": None}},
                 status=400,
             )
 
-        if not default_token_generator.check_token(user, data["token"]):
+        otp = (
+            PasswordResetOTP.objects.filter(user=user, is_used=False)
+            .order_by("-created_at")
+            .first()
+        )
+
+        if otp is None or otp.is_expired() or otp.verified_at is None:
             return Response(
-                {"error": {"detail": "Invalid or expired reset link.", "fields": None}},
+                {"error": {"detail": "This code has not been verified or has expired. Please start again.", "fields": None}},
+                status=400,
+            )
+
+        if not verify_otp_code(otp, data["code"]):
+            return Response(
+                {"error": {"detail": "Incorrect code.", "fields": None}},
                 status=400,
             )
 
         user.set_password(data["new_password"])
         user.save(update_fields=["password"])
+
+        otp.is_used = True
+        otp.save(update_fields=["is_used"])
+
         return Response({"detail": "Password reset successful. You can now log in."})

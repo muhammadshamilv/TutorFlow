@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from students.models import Student
 
+from .emails import send_session_scheduled_email
 from .models import Session, SessionStatus
 
 
@@ -116,7 +117,9 @@ class SessionCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         tutor = self.context["request"].user
         _check_clash(tutor, validated_data["scheduled_start"], validated_data["scheduled_end"])
-        return Session.objects.create(tutor=tutor, **validated_data)
+        session = Session.objects.create(tutor=tutor, **validated_data)
+        send_session_scheduled_email(session)
+        return session
 
     def to_representation(self, instance):
         return SessionSerializer(instance).data

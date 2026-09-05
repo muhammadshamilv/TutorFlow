@@ -49,6 +49,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.common.CommonMiddleware',
@@ -119,31 +120,30 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+WHITENOISE_MANIFEST_STRICT = False
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # Email (console backend for now — Phase 5 bonus may add real SMTP)
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# Email — real Gmail SMTP, used for the OTP password reset flow.
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = env("EMAIL_HOST_USER", default="noreply@tutorflow.local")
 
-
-# AI service (Gemini)
 GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
-GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-3.6-flash")
-GEMINI_MODEL_FALLBACKS = env.list(
-    "GEMINI_MODEL_FALLBACKS",
-    default=["gemini-3.5-flash", "gemini-3.1-flash-lite"],
-)
 # Configurable so a future model retirement (Google does this periodically)
 # only needs an env var change, not a code deploy.
-GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-3.6-flash")
+GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-flash-latest")
 # Tried in order if the primary model is overloaded/unavailable.
 GEMINI_MODEL_FALLBACKS = env.list(
     "GEMINI_MODEL_FALLBACKS",
     default=["gemini-2.5-flash-lite", "gemini-2.5-flash"],
 )
-GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-flash-latest")
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +175,13 @@ SIMPLE_JWT = {
 # Names of the httpOnly cookies we set on login
 AUTH_COOKIE_ACCESS = "tf_access"
 AUTH_COOKIE_REFRESH = "tf_refresh"
-AUTH_COOKIE_SAMESITE = "Lax"
+# SameSite=None is required so the browser sends the auth cookies when
+# the frontend and backend are on different domains in production
+# (e.g. Vercel + Render). SameSite=None only works when Secure=True,
+# which is why it's tied to DEBUG here — locally (DEBUG=True, plain
+# HTTP) we use Lax instead, since None+Secure would silently fail to
+# set the cookie at all over http://localhost.
+AUTH_COOKIE_SAMESITE = "Lax" if DEBUG else "None"
 AUTH_COOKIE_SECURE = not DEBUG  # True in production (HTTPS), False on localhost
 
 
@@ -188,4 +194,31 @@ CORS_ALLOWED_ORIGINS = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
+# Required by Django for cross-domain POST requests (login, etc) to be
+# accepted at all — without this, requests from the deployed frontend
+# are rejected with a 403 before even reaching CORS checks.
+CSRF_TRUSTED_ORIGINS = [
+    env("FRONTEND_URL", default="http://localhost:5173")
+]
+
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")
+
+# ---------------------------------------------------------------------------
+# Logging — Render captures stdout/stderr as logs, so route errors there
+# instead of Django's default (which can otherwise swallow 500s silently
+# in production once DEBUG=False).
+# ---------------------------------------------------------------------------
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+}

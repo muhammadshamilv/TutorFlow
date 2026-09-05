@@ -1,8 +1,10 @@
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
+from django.utils import timezone
 
 
 class UserRole(models.TextChoices):
@@ -88,3 +90,46 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def is_student(self):
         return self.role == UserRole.STUDENT
+
+
+class PasswordResetOTP(models.Model):
+    """
+    A one-time 6-digit code for the password reset flow. The code
+    itself is stored hashed (like a password) so a database leak alone
+    never exposes usable codes. A row is single-use: once verified and
+    consumed, `is_used` is set and the row is never reused, even if the
+    code technically hasn't expired yet.
+    """
+
+    OTP_LENGTH = 6
+    OTP_VALID_MINUTES = 10
+    MAX_ATTEMPTS = 5
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="password_reset_otps",
+    )
+    code_hash = models.CharField(max_length=128)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    is_used = models.BooleanField(default=False)
+
+    # Set only once the code has been verified, and required before the
+    # confirm-new-password step is allowed — closes the gap where
+    # someone could otherwise call "confirm" directly with a guessed
+    # code without it ever being checked by the "verify" step.
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "password_reset_otps"
+        ordering = ["-created_at"]
+
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    def is_valid(self):
+        return not self.is_used and not self.is_expired() and self.attempts < self.MAX_ATTEMPTS

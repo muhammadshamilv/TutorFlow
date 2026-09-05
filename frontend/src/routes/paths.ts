@@ -4,27 +4,25 @@
  * drifts out of sync between the route declaration and its usages.
  */
 export const paths = {
-    root: "/",
+  root: "/",
 
-    login: "/login",
-    forgotPassword: "/forgot-password",
-    resetPassword: "/reset-password",
+  login: "/login",
+  forgotPassword: "/forgot-password",
 
-    tutorHome: "/tutor",
-    studentDetail: (studentId: string) => `/tutor/students/${studentId}`,
-    sessionDetail: (sessionId: string) => `/tutor/sessions/${sessionId}`,
+  tutorHome: "/tutor",
+  studentDetail: (studentId: string) => `/tutor/students/${studentId}`,
+  sessionDetail: (sessionId: string) => `/tutor/sessions/${sessionId}`,
 
-    studentHome: "/student",
+  studentHome: "/student",
 } as const;
 
-  /** Raw path patterns for <Route path="..."> declarations. */
+/** Raw path patterns for <Route path="..."> declarations. */
 export const routePatterns = {
-    root: "/",
-    login: "/login",
-    forgotPassword: "/forgot-password",
-    resetPassword: "/reset-password",
-    tutorHome: "/tutor",
-    studentDetail: "/tutor/students/:studentId",
-    sessionDetail: "/tutor/sessions/:sessionId",
-    studentHome: "/student",
+  root: "/",
+  login: "/login",
+  forgotPassword: "/forgot-password",
+  tutorHome: "/tutor",
+  studentDetail: "/tutor/students/:studentId",
+  sessionDetail: "/tutor/sessions/:sessionId",
+  studentHome: "/student",
 } as const;
