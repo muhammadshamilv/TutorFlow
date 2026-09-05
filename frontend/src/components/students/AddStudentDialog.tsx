@@ -164,4 +164,4 @@ export function AddStudentDialog({ onCreated }: AddStudentDialogProps) {
       </DialogContent>
     </Dialog>
   );
-}   
+}

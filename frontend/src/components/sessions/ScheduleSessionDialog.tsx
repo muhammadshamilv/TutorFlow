@@ -46,8 +46,6 @@ export function ScheduleSessionDialog({ studentId, onScheduled }: ScheduleSessio
       await createSession({
         student: studentId,
         topic: values.topic,
-        // datetime-local gives local time with no timezone; new Date()
-        // parses it as local time, .toISOString() converts to UTC for the API.
         scheduled_start: new Date(values.scheduled_start).toISOString(),
         scheduled_end: new Date(values.scheduled_end).toISOString(),
       });
