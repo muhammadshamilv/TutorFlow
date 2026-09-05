@@ -16,7 +16,7 @@ _add your repository link here_
 
 | Role | Email | Password |
 |---|---|---|
-| Tutor | `tutor@tutorflow.com.com` | `Tutor@123` |
+| Tutor | `tutor@tutorflow.com` | `Tutor@123` |
 | Student | `student@tutorflow.com` | `Student@123` |
 
 ---
