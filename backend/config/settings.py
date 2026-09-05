@@ -181,7 +181,7 @@ AUTH_COOKIE_REFRESH = "tf_refresh"
 # which is why it's tied to DEBUG here — locally (DEBUG=True, plain
 # HTTP) we use Lax instead, since None+Secure would silently fail to
 # set the cookie at all over http://localhost.
-AUTH_COOKIE_SAMESITE = "Lax" if DEBUG else "None"
+AUTH_COOKIE_SAMESITE = "Lax"
 AUTH_COOKIE_SECURE = not DEBUG  # True in production (HTTPS), False on localhost
 
 
