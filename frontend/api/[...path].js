@@ -16,62 +16,73 @@
  * browser's point of view, avoiding third-party cookie blocking.
  *
  * Catches every path under /api/* via the [...path] filename below.
+ *
+ * NOTE: the path segment is parsed directly from `req.url` rather
+ * than from `req.query.path`. The query-param form has been
+ * inconsistent across Vercel's Node runtime versions for catch-all
+ * routes — parsing the raw URL is unambiguous and has no dependency
+ * on how the platform decides to populate `req.query`.
  */
 
 export const config = {
-    api: {
-      bodyParser: false,
-    },
-  };
-  
-  const BACKEND_URL = process.env.BACKEND_URL || "https://tutorflow-backend-rn70.onrender.com";
-  
-  export default async function handler(req, res) {
-    const path = Array.isArray(req.query.path) ? req.query.path.join("/") : "";
-    const search = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-    const targetUrl = `${BACKEND_URL}/api/${path}${search}`;
-  
-    // Read the raw request body as a buffer so it works for JSON,
-    // empty bodies (GET/DELETE), and anything else without assuming a
-    // content type.
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(chunk);
-    }
-    const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
-  
-    const forwardHeaders = { ...req.headers };
-    delete forwardHeaders.host;
-    delete forwardHeaders.connection;
-    delete forwardHeaders["content-length"];
-  
-    let backendResponse;
-    try {
-      backendResponse = await fetch(targetUrl, {
-        method: req.method,
-        headers: forwardHeaders,
-        body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
-        redirect: "manual",
-      });
-    } catch (error) {
-      res.status(502).json({
-        error: { detail: "Could not reach the backend service.", fields: null },
-      });
-      return;
-    }
-  
-    // Forward every Set-Cookie header exactly as the backend sent it,
-    // so the httpOnly JWT cookies reach the browser unmodified.
-    const setCookie = backendResponse.headers.get("set-cookie");
-    if (setCookie) {
-      res.setHeader("set-cookie", setCookie);
-    }
-  
-    const contentType = backendResponse.headers.get("content-type");
-    if (contentType) {
-      res.setHeader("content-type", contentType);
-    }
-  
-    const responseBody = Buffer.from(await backendResponse.arrayBuffer());
-    res.status(backendResponse.status).send(responseBody);
+  api: {
+    bodyParser: false,
+  },
+};
+
+const BACKEND_URL = process.env.BACKEND_URL || "https://tutorflow-backend-zw80.onrender.com";
+
+export default async function handler(req, res) {
+  // req.url for a request to /api/v1/auth/login/ is "/api/v1/auth/login/"
+  // (Vercel strips nothing here) — split off everything after "/api/"
+  // ourselves so this never depends on req.query being populated.
+  const rawUrl = req.url || "";
+  const apiIndex = rawUrl.indexOf("/api/");
+  const afterApi = apiIndex !== -1 ? rawUrl.slice(apiIndex + "/api/".length) : "";
+
+  const targetUrl = `${BACKEND_URL}/api/${afterApi}`;
+
+  // Read the raw request body as a buffer so it works for JSON,
+  // empty bodies (GET/DELETE), and anything else without assuming a
+  // content type.
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
   }
+  const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
+
+  const forwardHeaders = { ...req.headers };
+  delete forwardHeaders.host;
+  delete forwardHeaders.connection;
+  delete forwardHeaders["content-length"];
+
+  let backendResponse;
+  try {
+    backendResponse = await fetch(targetUrl, {
+      method: req.method,
+      headers: forwardHeaders,
+      body: ["GET", "HEAD"].includes(req.method) ? undefined : body,
+      redirect: "manual",
+    });
+  } catch (error) {
+    res.status(502).json({
+      error: { detail: "Could not reach the backend service.", fields: null },
+    });
+    return;
+  }
+
+  // Forward every Set-Cookie header exactly as the backend sent it,
+  // so the httpOnly JWT cookies reach the browser unmodified.
+  const setCookie = backendResponse.headers.get("set-cookie");
+  if (setCookie) {
+    res.setHeader("set-cookie", setCookie);
+  }
+
+  const contentType = backendResponse.headers.get("content-type");
+  if (contentType) {
+    res.setHeader("content-type", contentType);
+  }
+
+  const responseBody = Buffer.from(await backendResponse.arrayBuffer());
+  res.status(backendResponse.status).send(responseBody);
+}
