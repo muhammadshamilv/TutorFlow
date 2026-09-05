@@ -1,0 +1,26 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Proxy every /api/* request to the Django backend on Render. Netlify's
+# redirect proxy (status 200, not 301/302) forwards the method and body
+# exactly as received for every HTTP verb, which is what makes login
+# (POST) work the same as a plain GET health check.
+#
+# Because the browser only ever talks to this Netlify domain, the
+# httpOnly JWT cookies set by Django arrive as first-party cookies —
+# this is the same reasoning that motivated the original Vercel proxy
+# function, but here it's a one-line config instead of custom code.
+[[redirects]]
+  from = "/api/*"
+  to = "https://tutorflow-backend-zw80.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+# SPA fallback: any other path (e.g. /tutor/students/:id) that isn't a
+# real static file should serve index.html so React Router can handle
+# it client-side, including on a hard refresh or direct URL visit.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
