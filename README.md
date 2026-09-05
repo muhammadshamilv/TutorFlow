@@ -6,11 +6,11 @@ A session platform for online tutors who teach students one to one. A tutor can 
 
 ## Live URL
 
-_add your deployed URL here_
+https://tutorflow-frontend.netlify.app/
 
 ## GitHub Repository
 
-_add your repository link here_
+https://github.com/muhammadshamilv/TutorFlow
 
 ## Test Logins
 
