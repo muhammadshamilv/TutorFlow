@@ -3,10 +3,6 @@
     {
       "source": "/api/:path*",
       "destination": "https://tutorflow-backend-zw80.onrender.com/api/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
     }
   ]
 }
